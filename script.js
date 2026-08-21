@@ -11,11 +11,13 @@
   var voilaAudio = document.getElementById("voilaAudio");
 
   var ctx = canvas.getContext("2d");
+  var defaultAudioVolume = voilaAudio ? voilaAudio.volume : 1;
 
   var BRUSH_RADIUS = 30; // soft brush radius in CSS px (~25-35px per spec)
-  var REVEAL_THRESHOLD = 0.55; // 55% scratched triggers payoff
+  var REVEAL_THRESHOLD = 0.40; // 40% scratched triggers payoff
   var CENTER_HIT_RADIUS_RATIO = 0.16; // fraction of canvas min-dimension counted as "center emblem"
   var SAMPLE_STEP = 4; // sample every Nth pixel when estimating scratched percentage (perf)
+  var PERCENT_CHECK_EVERY_N_MOVES = 3; // throttle getImageData cost without leaving the gesture's call stack
 
   var dpr = Math.max(1, window.devicePixelRatio || 1);
   var cssWidth = 0;
@@ -23,10 +25,13 @@
   var isDrawing = false;
   var hasInteracted = false;
   var isRevealed = false;
+  var audioUnlocked = false;
+  var audioPlaybackPending = false;
+  var realPlaybackTriggered = false;
   var lastPoint = null;
   var frontImageReady = false;
   var hiddenImageReady = false;
-  var pendingPercentCheck = false;
+  var moveEventCount = 0;
 
   function onFrontImageLoaded() {
     frontImageReady = true;
@@ -179,16 +184,22 @@
     }
   }
 
-  function scheduleScratchedPercentCheck() {
-    if (pendingPercentCheck || isRevealed) return;
-    pendingPercentCheck = true;
-    window.requestAnimationFrame(function () {
-      pendingPercentCheck = false;
-      var percent = estimateScratchedPercent();
-      if (percent >= REVEAL_THRESHOLD) {
-        triggerReveal();
-      }
-    });
+  // Runs the (relatively costly) getImageData scan synchronously, in the
+  // SAME call stack as the mouse/touch event that triggered it. This is
+  // deliberate: deferring this via requestAnimationFrame/setTimeout would
+  // detach triggerReveal() (and its audio.play() call) from the user
+  // gesture, which browsers use to decide whether audio is allowed to play.
+  // We only throttle by event count, never by async deferral.
+  function scheduleScratchedPercentCheck(force) {
+    if (isRevealed) return;
+    if (!force) {
+      moveEventCount++;
+      if (moveEventCount % PERCENT_CHECK_EVERY_N_MOVES !== 0) return;
+    }
+    var percent = estimateScratchedPercent();
+    if (percent >= REVEAL_THRESHOLD) {
+      triggerReveal();
+    }
   }
 
   function estimateScratchedPercent() {
@@ -220,25 +231,83 @@
     return transparentCount / totalSampled;
   }
 
-  function triggerReveal() {
-    if (isRevealed) return;
-    isRevealed = true;
+  // "Primes" the audio element with a real, synchronous user gesture
+  // (mousedown/touchstart). Some browsers (notably mobile Safari) only ever
+  // allow an <audio> element to play if IT has previously been played, even
+  // briefly, directly inside a trusted gesture handler; once that happens,
+  // later play() calls on the same element succeed even if triggered from
+  // a non-gesture context (e.g. mid-drag, once a threshold is crossed).
+  function unlockAudio() {
+    if (audioUnlocked || !voilaAudio) return;
+    audioUnlocked = true;
+    try {
+      voilaAudio.volume = 0;
+      var primePromise = voilaAudio.play();
+      if (primePromise && typeof primePromise.then === "function") {
+        primePromise.then(function () {
+          // If the real payoff sound already started (synchronously, later
+          // in the same gesture) while this promise was pending, leave it
+          // alone - do NOT pause/rewind/re-mute audio that is genuinely
+          // playing for the user right now.
+          if (realPlaybackTriggered) return;
+          voilaAudio.pause();
+          voilaAudio.currentTime = 0;
+          voilaAudio.volume = defaultAudioVolume;
+        }).catch(function () {
+          // Some browsers reject a play() that is immediately paused; that's
+          // fine, the gesture attempt itself is what matters for unlocking.
+          if (!realPlaybackTriggered) voilaAudio.volume = defaultAudioVolume;
+        });
+      } else {
+        voilaAudio.pause();
+        voilaAudio.currentTime = 0;
+        voilaAudio.volume = defaultAudioVolume;
+      }
+    } catch (err) {
+      /* Audio not available; the real playAudioPayoff() call will just fail silently later. */
+    }
+  }
 
-    hideHint();
-
-    // Play the payoff sound. Browsers may block autoplay-with-sound until a
-    // user gesture has occurred; scratching the card already counts as one.
+  function playAudioPayoff() {
+    if (!voilaAudio) return;
+    // Mark this BEFORE calling play(), synchronously, so that if an
+    // in-flight unlockAudio() promise resolves right after this, it knows
+    // real playback has already taken over and must not touch the element.
+    realPlaybackTriggered = true;
+    voilaAudio.volume = defaultAudioVolume;
     try {
       voilaAudio.currentTime = 0;
       var playPromise = voilaAudio.play();
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch(function () {
-          /* Playback blocked; silently ignore. */
+          // First attempt was blocked (e.g. unlock hadn't resolved yet on a
+          // very fast tap-and-release). Retry once on the next real gesture
+          // anywhere on the page, which will definitely be trusted.
+          if (audioPlaybackPending) return;
+          audioPlaybackPending = true;
+          var retry = function () {
+            document.removeEventListener("pointerdown", retry, true);
+            document.removeEventListener("touchend", retry, true);
+            var retryPromise = voilaAudio.play();
+            if (retryPromise && typeof retryPromise.catch === "function") {
+              retryPromise.catch(function () { /* give up quietly */ });
+            }
+          };
+          document.addEventListener("pointerdown", retry, true);
+          document.addEventListener("touchend", retry, true);
         });
       }
     } catch (err) {
       /* Audio not available; ignore. */
     }
+  }
+
+  function triggerReveal() {
+    if (isRevealed) return;
+    isRevealed = true;
+
+    hideHint();
+    playAudioPayoff();
 
     CARD_SELECTOR_ROOT.classList.add("is-revealed");
     revealFlourish.classList.add("is-active");
@@ -265,13 +334,18 @@
   function handleStart(evt) {
     if (isRevealed) return;
     evt.preventDefault();
+    // Prime/unlock the audio element synchronously inside this real user
+    // gesture (mousedown/touchstart), before any scratching happens. This
+    // is what lets the LATER triggerReveal() play the sound successfully,
+    // even a delayed reveal deep into a drag.
+    unlockAudio();
     isDrawing = true;
     hasInteracted = true;
     hideHint();
     var point = getPointFromEvent(evt);
     lastPoint = point;
     scratchAt(point.x, point.y);
-    scheduleScratchedPercentCheck();
+    scheduleScratchedPercentCheck(true);
   }
 
   function handleMove(evt) {
@@ -284,14 +358,14 @@
       scratchAt(point.x, point.y);
     }
     lastPoint = point;
-    scheduleScratchedPercentCheck();
+    scheduleScratchedPercentCheck(false);
   }
 
   function handleEnd(evt) {
     if (!isDrawing) return;
     isDrawing = false;
     lastPoint = null;
-    scheduleScratchedPercentCheck();
+    scheduleScratchedPercentCheck(true);
   }
 
   function attachEvents() {
