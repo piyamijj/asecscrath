@@ -13,9 +13,9 @@
   var ctx = canvas.getContext("2d");
   var defaultAudioVolume = voilaAudio ? voilaAudio.volume : 1;
 
-  var BRUSH_RADIUS = 30; // soft brush radius in CSS px (~25-35px per spec)
+  var BRUSH_RADIUS = 20; // soft brush radius in CSS px (smaller = needs real, sustained scratching)
   var REVEAL_THRESHOLD = 0.50; // 50% scratched triggers payoff
-  var CENTER_HIT_RADIUS_RATIO = 0.16; // fraction of canvas min-dimension counted as "center emblem"
+  var CENTER_HIT_RADIUS_RATIO = 0.05; // fraction of canvas min-dimension: a small, deliberate bullseye on the emblem's center - not a broad "anywhere in the middle" zone
   var SAMPLE_STEP = 4; // sample every Nth pixel when estimating scratched percentage (perf)
   var PERCENT_CHECK_EVERY_N_MOVES = 3; // throttle getImageData cost without leaving the gesture's call stack
 
