@@ -14,7 +14,7 @@
   var defaultAudioVolume = voilaAudio ? voilaAudio.volume : 1;
 
   var BRUSH_RADIUS = 30; // soft brush radius in CSS px (~25-35px per spec)
-  var REVEAL_THRESHOLD = 0.40; // 40% scratched triggers payoff
+  var REVEAL_THRESHOLD = 0.50; // 50% scratched triggers payoff
   var CENTER_HIT_RADIUS_RATIO = 0.16; // fraction of canvas min-dimension counted as "center emblem"
   var SAMPLE_STEP = 4; // sample every Nth pixel when estimating scratched percentage (perf)
   var PERCENT_CHECK_EVERY_N_MOVES = 3; // throttle getImageData cost without leaving the gesture's call stack
