@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Red John Scratch Card | The Mentalist</title>
+<meta name="description" content="Scratch away the CBI office scene to reveal what's hiding underneath.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="page min-h-screen">
+
+  <header class="site-header">
+    <p class="eyebrow">The Mentalist &mdash; A Message From Red John</p>
+    <h1 class="title">He Knows You're Watching</h1>
+    <p class="hint" id="hint">Scratch the photo to see what's underneath</p>
+  </header>
+
+  <main class="stage">
+    <div class="card-frame">
+      <div class="scratch-card" id="scratchCard">
+        <img
+          class="hidden-layer"
+          id="hiddenImage"
+          src="assets/red-john-hidden.jpg"
+          alt="A red smiley face symbol drawn in a dripping paint style, the calling card of Red John"
+          draggable="false">
+        <canvas class="scratch-canvas" id="scratchCanvas" aria-label="Scratch this surface to reveal the hidden image"></canvas>
+        <img
+          class="front-layer-source"
+          id="frontImageSource"
+          src="assets/cover-front.jpg"
+          alt="Patrick Jane and Teresa Lisbon standing together in the CBI office"
+          draggable="false"
+          hidden>
+      </div>
+      <div class="reveal-flourish" id="revealFlourish" aria-hidden="true"></div>
+    </div>
+
+    <p class="caption" id="caption">Someone left this behind at the CBI office&hellip;</p>
+  </main>
+
+  <footer class="site-footer">
+    <p>A fan-made interactive tribute. Not affiliated with or endorsed by the makers of <em>The Mentalist</em>.</p>
+  </footer>
+
+</div>
+
+<audio id="voilaAudio" src="assets/voila-reveal.mp3" preload="auto"></audio>
+
+<script src="script.js"></script>
+</body>
+</html>
