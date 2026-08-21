@@ -36,5 +36,5 @@ Then visit `http://localhost:8000` in your browser.
 
 ## Credits
 
-- Sound effect: a royalty-free "Ta-Da" clip, licensed under Attribution 3.0.
+- Reveal sound: a synthesized spoken "Voilà!" (text-to-speech, generic voice, not any real actor).
 - Images are used for fan-made, non-commercial purposes. This project is not affiliated with or endorsed by the makers of *The Mentalist*.
